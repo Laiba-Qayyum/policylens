@@ -15,5 +15,6 @@ data/tenants/
 # Model files
 models/
 
-# Local Claude settings
+# Local Claude files
 .claude/settings.local.json
+CLAUDE.md
