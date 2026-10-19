@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Secrets
+.env
+
+# Customer data and indexes
+data/tenants/
+*.faiss
+*.pkl
+
+# Model files
+models/
+
+# Local Claude settings
+.claude/settings.local.json
