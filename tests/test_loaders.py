@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from docx import Document
 
 from src.loaders import load_file
 
@@ -21,3 +22,12 @@ def test_unsupported_type_is_rejected(tmp_path: Path):
 def test_missing_file_raises(tmp_path: Path):
     with pytest.raises(FileNotFoundError):
         load_file(tmp_path / "nope.txt")
+
+
+def test_docx_is_one_page(tmp_path: Path):
+    file = tmp_path / "handbook.docx"
+    doc = Document()
+    doc.add_paragraph("Leave policy")
+    doc.add_paragraph("Employees get 20 days.")
+    doc.save(str(file))
+    assert load_file(file) == [(1, "Leave policy\nEmployees get 20 days.")]
