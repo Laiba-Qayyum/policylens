@@ -27,7 +27,7 @@ searching, and they can act on outdated or conflicting information.
 - **Logging:** every log line includes a tenant ID.
 - **Quality checks:** 21 pytest tests, ruff linting, and pre-commit hooks that
   block committed secrets and `.env` files.
-- **Docker:** a Dockerfile that runs the app as a non-root user.
+- **Docker:** a Dockerfile is included (not yet built and tested end to end).
 
 ## Planned
 
@@ -40,6 +40,21 @@ searching, and they can act on outdated or conflicting information.
 5. Evaluation with measured results on a labeled test set
 6. API and a simple web interface
 
+## Architecture
+
+```mermaid
+flowchart LR
+    A["Files<br/>TXT, DOCX, PDF"] --> B["Loaders<br/>src/loaders.py"]
+    B --> C["Chunking<br/>src/chunking.py"]
+    C --> D["Chunks with metadata<br/>src/ingestion.py"]
+    D -.->|planned| E["Search<br/>per-tenant FAISS"]
+    E -.->|planned| F["Cited answers"]
+    classDef planned stroke-dasharray: 5 5
+    class E,F planned
+```
+
+Solid boxes are built; dashed boxes are planned.
+
 ## Getting started
 
 Requires Python 3.11 and Git.
@@ -50,7 +65,13 @@ cd policylens
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
-pytest
+```
+
+## Running tests
+
+```powershell
+pytest -v
+ruff check .
 ```
 
 ## Project structure
@@ -74,7 +95,15 @@ Development followed an iterative process of implementation, testing, debugging,
 
 ## Limitations
 
-- Not a complete question-answering system yet.
-- The planned design stores search indexes on one machine, so it suits a
-  single server, not thousands of customers. A larger deployment would need a
-  database-backed store, background workers and load testing.
+- **Scanned PDFs:** there is no OCR. For image-only pages `extract_text()`
+  returns an empty string, so the file produces no chunks and no error.
+- **Metadata:** document type, version and date are not read from the
+  document. The caller must pass them to `make_chunks`; they have no defaults.
+- **DOCX:** only paragraphs are read, not tables. Page breaks are ignored, so
+  the whole file is cited as page 1.
+- **Chunk size:** `chunk_text` splits on whitespace, so the default size of
+  200 (overlap 40) counts words, not characters or model tokens.
+- **Not a question-answering system yet:** search and answering are planned.
+- **Scalability:** the planned design stores search indexes on one machine, so
+  it suits a single server, not thousands of customers. A larger deployment
+  would need a database-backed store, background workers and load testing.
