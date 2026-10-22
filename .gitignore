@@ -18,3 +18,5 @@ models/
 # Local Claude files
 .claude/settings.local.json
 CLAUDE.md
+
+.claude/
