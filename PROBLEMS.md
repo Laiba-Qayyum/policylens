@@ -1,9 +1,18 @@
-# Problems log
+## Engineering Challenges & Lessons Learned
 
-| Date | Problem | Cause | Fix | Lesson |
-|---|---|---|---|---|
-| 2026-10-19 | Installing dev tools took over 5 minutes and the command timed out. | Slow network while pip downloaded packages into a fresh venv. | Ran the install in the background and pinned the versions it installed. | Expect the first install to be slow; pin versions once so later installs are predictable. |
-| 2026-10-20 | CLAUDE.md was on GitHub even after adding it to .gitignore. | .gitignore only affects untracked files; CLAUDE.md was already in two pushed commits. | `git rm --cached CLAUDE.md`, then rewrote history with `git filter-branch` and force-pushed. | Decide what stays private before the first push. Removing a file later means rewriting history. |
-| 2026-10-20 | Force-push failed with "cannot parse expected object name". | `--force-with-lease=main:<short id>` used a short commit ID that git could no longer find after cleanup. | Used the full 40-character commit ID. | Use full commit IDs in commands that check the remote state. |
-| 2026-10-20 | pre-commit crashed with "path is on mount 'C:', start on mount 'D:'". | pre-commit only checks files inside the repo, and the test files were on another drive. | Created the test files in a temporary folder inside the repo, then deleted it. | Test hooks with files inside the repo. |
-| 2026-10-20 | `docker run ... ls /app` said "cannot access C:/Program Files/Git/app". | Git Bash turns arguments that start with `/` into Windows paths before Docker sees them. | Set `MSYS_NO_PATHCONV=1` (or use PowerShell) when passing Linux paths to Docker. | In Git Bash, Linux paths in Docker commands need path conversion turned off. |
+PolicyLens processes documents that may contain inconsistent formatting, incomplete metadata, and conflicting policy statements. The following challenges guide implementation and validation as the project evolves.
+
+| Challenge | Why It Matters | Engineering Approach | Validation |
+|---|---|---|---|
+| Preserving PDF page-level traceability | Incorrect page metadata can make citations point to the wrong location, reducing trust in answers. | Preserve page numbers during extraction and carry them through chunking and retrieval. | Test multi-page PDFs and verify every retrieved chunk against its original page. |
+| Handling malformed and partially readable documents | A single unsupported or corrupted file should not crash an entire ingestion batch. | Validate file types, handle parsing errors per document, and record actionable error details. | Test empty, malformed, unsupported, and partially readable files. |
+| Preventing retrieval from crossing tenant boundaries | Shared indexes or incorrectly applied filters could expose one tenant's documents to another. | Enforce tenant-scoped retrieval and authorization at the data-access layer. | Add isolation tests proving that one tenant cannot retrieve another tenant's chunks. |
+| Avoiding unsupported answers | A language model may generate plausible statements that are not supported by the source documents. | Require evidence-based answers, apply relevance thresholds, and abstain when retrieved evidence is insufficient. | Test answer generation against questions with both available and unavailable evidence. |
+| Maintaining citations through chunking | Overlapping chunks and document transformations can cause duplicated or incomplete citations. | Attach stable source identifiers and page metadata to each chunk; return source references with retrieved passages. | Verify citation accuracy for documents with repeated text and overlapping chunks. |
+| Detecting conflicting policy statements | Two documents may give different instructions because of version changes, exceptions, or inconsistent wording. | Compare relevant passages alongside document dates, versions, and source metadata before flagging a conflict. | Test known conflicting statements and cases that appear contradictory but have different scopes. |
+| Keeping ingestion reliable and repeatable | Reprocessing the same documents can create duplicate chunks or inconsistent index contents. | Use stable document identifiers, content hashes, and explicit re-ingestion rules. | Ingest the same document twice and verify the expected record counts and results. |
+| Controlling resource usage for large documents | Large PDFs or bulk uploads can increase memory usage and processing time. | Process documents incrementally, configure chunk sizes, and establish file-size limits. | Benchmark representative document sizes and measure processing time and memory usage. |
+
+### Engineering Principle
+
+Every challenge should lead to a reproducible test. A fix is considered complete only when the relevant test passes and the expected behavior is documented.
