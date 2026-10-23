@@ -5,6 +5,8 @@ from src.llm import LLM
 from src.prompts import build_prompt
 from src.tenants import TenantStores
 
+REFUSAL = "I don't know."
+
 
 @dataclass(frozen=True)
 class Answer:
@@ -17,5 +19,8 @@ def answer_question(
 ) -> Answer:
     chunks = stores.search(tenant_id, question, k)
     if not chunks:
-        return Answer("I don't know.", [])
-    return Answer(llm.complete(build_prompt(question, chunks)), chunks)
+        return Answer(REFUSAL, [])
+    reply = llm.complete(build_prompt(question, chunks))
+    if reply.strip().lower().startswith("i don't know"):
+        return Answer(REFUSAL, [])
+    return Answer(reply, chunks)

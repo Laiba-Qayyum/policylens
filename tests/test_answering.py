@@ -65,3 +65,12 @@ def test_no_results_means_i_dont_know_and_no_llm_call() -> None:
     assert answer.text == "I don't know."
     assert answer.sources == []
     assert llm.prompts == []
+
+
+def test_model_refusal_returns_no_sources() -> None:
+    llm = FakeLLM("I don't know.")
+
+    answer = answer_question("acme", "annual leave", make_stores(), llm)
+
+    assert answer.text == "I don't know."
+    assert answer.sources == []
