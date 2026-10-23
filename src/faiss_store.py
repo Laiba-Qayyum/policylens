@@ -16,8 +16,13 @@ class FaissStore:
         self._index.add(self._embedder.embed([c.text for c in chunks]))
         self._chunks.extend(chunks)
 
-    def search(self, query: str, k: int = 3) -> list[Chunk]:
+    def search(self, query: str, k: int = 3, min_score: float = -1.0) -> list[Chunk]:
         if not self._chunks:
             return []
-        _, ids = self._index.search(self._embedder.embed([query]), min(k, len(self._chunks)))
-        return [self._chunks[i] for i in ids[0]]
+        query_vector = self._embedder.embed([query])
+        scores, ids = self._index.search(query_vector, min(k, len(self._chunks)))
+        return [
+            self._chunks[i]
+            for score, i in zip(scores[0], ids[0], strict=True)
+            if score >= min_score
+        ]

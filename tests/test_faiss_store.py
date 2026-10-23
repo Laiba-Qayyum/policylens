@@ -52,3 +52,11 @@ def test_tenants_with_real_faiss_stores_stay_isolated() -> None:
     texts = [c.text for c in stores.search("globex", "leave")]
 
     assert "acme leave policy" not in texts
+
+
+def test_min_score_filters_out_unrelated_chunks() -> None:
+    store = make_store()
+    store.add([make_chunk("annual leave days")])
+
+    assert store.search("parking", min_score=0.3) == []
+    assert len(store.search("leave", min_score=0.3)) == 1
