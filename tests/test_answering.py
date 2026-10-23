@@ -13,6 +13,8 @@ class FakeStore:
         self.chunks.extend(chunks)
 
     def search(self, query: str, k: int = 3, min_score: float = -1.0) -> list[Chunk]:
+        if min_score > 0.5:  # pretend nothing is similar enough
+            return []
         words = query.lower().split()
         hits = [c for c in self.chunks if any(w in c.text.lower() for w in words)]
         return hits[:k]
@@ -74,3 +76,13 @@ def test_model_refusal_returns_no_sources() -> None:
 
     assert answer.text == "I don't know."
     assert answer.sources == []
+
+
+def test_low_similarity_means_i_dont_know_and_no_llm_call() -> None:
+    llm = FakeLLM("should not be used")
+
+    answer = answer_question("acme", "annual leave", make_stores(), llm, min_score=0.9)
+
+    assert answer.text == "I don't know."
+    assert answer.sources == []
+    assert llm.prompts == []
