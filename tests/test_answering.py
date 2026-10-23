@@ -12,7 +12,7 @@ class FakeStore:
     def add(self, chunks: list[Chunk]) -> None:
         self.chunks.extend(chunks)
 
-    def search(self, query: str, k: int = 3) -> list[Chunk]:
+    def search(self, query: str, k: int = 3, min_score: float = -1.0) -> list[Chunk]:
         words = query.lower().split()
         hits = [c for c in self.chunks if any(w in c.text.lower() for w in words)]
         return hits[:k]

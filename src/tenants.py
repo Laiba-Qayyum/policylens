@@ -14,6 +14,8 @@ class TenantStores:
             self._stores[tenant_id] = self._factory()
         self._stores[tenant_id].add(chunks)
 
-    def search(self, tenant_id: str, query: str, k: int = 3) -> list[Chunk]:
+    def search(
+        self, tenant_id: str, query: str, k: int = 3, min_score: float = -1.0
+    ) -> list[Chunk]:
         store = self._stores.get(tenant_id)
-        return store.search(query, k) if store else []
+        return store.search(query, k, min_score) if store else []
