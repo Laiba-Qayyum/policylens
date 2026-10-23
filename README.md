@@ -6,8 +6,8 @@ circulars, cite the source document and page, say "I don't know" when the
 documents don't support an answer, and handle documents that contradict each
 other.
 
-> **Status:** in development. The document-processing foundation is done.
-> Search, answering and conflict detection are planned.
+- **Search:** FAISS search with a MiniLM embedder, using a separate store
+  for each tenant. Tests check that tenants can only search their own documents.
 
 ## Problem
 
@@ -25,20 +25,16 @@ searching, and they can act on outdated or conflicting information.
 - **Configuration:** one validated settings class that reads environment
   variables and hides the API key when printed.
 - **Logging:** every log line includes a tenant ID.
-- **Quality checks:** 21 pytest tests, ruff linting, and pre-commit hooks that
+- **Quality checks:** 27 pytest tests, ruff linting, and pre-commit hooks that
   block committed secrets and `.env` files.
 - **Docker:** a Dockerfile is included (not yet built and tested end to end).
 
 ## Planned
 
-1. Per-tenant document storage and search (tenant A must never retrieve
-   tenant B's text, proven by a test)
-2. Semantic search with FAISS, behind a small interface so the store can be
-   swapped later
-3. Cited answers, with refusal when the documents don't support one
-4. Conflict detection between documents, and preferring the authoritative one
-5. Evaluation with measured results on a labeled test set
-6. API and a simple web interface
+1. Cited answers, refusing when documents don't support an answer
+2. Conflict detection and preference for authoritative documents
+3. Evaluation using measured results on a labeled test set
+4. API and a simple web interface
 
 ## Architecture
 
@@ -47,13 +43,11 @@ flowchart LR
     A["Files<br/>TXT, DOCX, PDF"] --> B["Loaders<br/>src/loaders.py"]
     B --> C["Chunking<br/>src/chunking.py"]
     C --> D["Chunks with metadata<br/>src/ingestion.py"]
-    D -.->|planned| E["Search<br/>per-tenant FAISS"]
+    D --> E["Per-tenant FAISS search<br/>src/tenants.py, src/faiss_store.py"]
     E -.->|planned| F["Cited answers"]
     classDef planned stroke-dasharray: 5 5
-    class E,F planned
+    class F planned
 ```
-
-Solid boxes are built; dashed boxes are planned.
 
 ## Getting started
 
@@ -83,6 +77,12 @@ ruff check .
 | `src/loaders.py` | TXT, DOCX and PDF loading |
 | `src/chunking.py` | Overlapping text chunks |
 | `src/ingestion.py` | Chunks with metadata |
+| `src/vector_store.py` | Store interface (`add`, `search`) |
+| `src/tenants.py` | One store per tenant |
+| `src/faiss_store.py` | FAISS store |
+| `src/embeddings.py` | Embedder interface |
+| `src/sbert_embedder.py` | MiniLM embedder |
+| `scripts/search_demo.py` | Search demo on a sample policy |
 | `tests/` | pytest tests |
 | `docs/decisions/` | Decision records |
 | `PROBLEMS.md` | Problems encountered and how they were fixed |
@@ -107,3 +107,5 @@ Development followed an iterative process of implementation, testing, debugging,
 - **Scalability:** the planned design stores search indexes on one machine, so
   it suits a single server, not thousands of customers. A larger deployment
   would need a database-backed store, background workers and load testing.
+- Retrieval quality depends on chunk size. In the demo, a loosely related
+  chunk ranked above the best match. This needs further evaluation.
