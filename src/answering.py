@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 
+from src.citations import cited_sources
 from src.conflicts import find_competing_sources
 from src.ingestion import Chunk
 from src.llm import LLM
@@ -14,6 +15,7 @@ class Answer:
     text: str
     sources: list[Chunk]
     competing: list[str] = field(default_factory=list)
+    verified: bool = True
 
 
 def answer_question(
@@ -30,4 +32,6 @@ def answer_question(
     reply = llm.complete(build_prompt(question, chunks))
     if reply.strip().lower().startswith("i don't know"):
         return Answer(REFUSAL, [])
-    return Answer(reply, chunks, find_competing_sources(chunks))
+    cited, invalid = cited_sources(reply, chunks)
+    verified = bool(cited) and not invalid
+    return Answer(reply, cited or chunks, find_competing_sources(chunks), verified)

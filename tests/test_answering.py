@@ -105,3 +105,42 @@ def test_answer_lists_competing_sources_newest_first() -> None:
     answer = answer_question("acme", "returns", stores, FakeLLM("see sources"))
 
     assert answer.competing == ["returns_2026.txt", "returns_2025.txt"]
+
+
+def make_dated_chunk(text: str, source: str, day: date) -> Chunk:
+    return Chunk(text, source, 1, "policy", "1.0", day)
+
+
+def make_returns_stores() -> tuple[TenantStores, Chunk, Chunk]:
+    new = make_dated_chunk("returns within 15 days", "returns_2026.txt", date(2026, 1, 1))
+    old = make_dated_chunk("returns within 30 days", "returns_2025.txt", date(2025, 1, 1))
+    stores = TenantStores(FakeStore)
+    stores.add("acme", [new, old])
+    return stores, new, old
+
+
+def test_only_cited_sources_are_returned_and_marked_verified() -> None:
+    stores, new, _ = make_returns_stores()
+
+    answer = answer_question("acme", "returns", stores, FakeLLM("15 days [1]"))
+
+    assert answer.sources == [new]
+    assert answer.verified
+    assert answer.competing == ["returns_2026.txt", "returns_2025.txt"]
+
+
+def test_reply_without_a_citation_is_unverified_and_keeps_all_sources() -> None:
+    stores, new, old = make_returns_stores()
+
+    answer = answer_question("acme", "returns", stores, FakeLLM("15 days"))
+
+    assert not answer.verified
+    assert answer.sources == [new, old]
+
+
+def test_reply_citing_a_missing_source_is_unverified() -> None:
+    stores, _, _ = make_returns_stores()
+
+    answer = answer_question("acme", "returns", stores, FakeLLM("15 days [9]"))
+
+    assert not answer.verified
