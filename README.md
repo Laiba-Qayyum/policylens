@@ -7,8 +7,8 @@ don't support an answer. A metadata-based check for competing documents exists;
 detecting real contradictions is planned.
 
 > **Status:** in development. Loading, chunking, per-tenant search, answering through
-> a local model and a first check for competing documents work and are tested.
-> Contradiction detection, an API and a web interface are planned.
+> a local model, a first check for competing documents and a command-line tool work
+> and are tested. Contradiction detection, an API and a web interface are planned.
 
 ## Problem
 
@@ -21,7 +21,7 @@ searching, and they can act on outdated or conflicting information.
 - **File loading:** reads TXT, DOCX and PDF files, keeping page numbers for PDFs.
 - **Chunking:** splits text into overlapping chunks (200 words, 40 overlap by default).
 - **Metadata:** each chunk carries its source file, page, document type, version
-  and date.
+  and date. Files loaded through the command line get the file's modified date.
 - **Semantic search:** chunks are embedded with a MiniLM model and searched with
   FAISS. A `min_score` cutoff drops chunks that are not similar enough.
 - **Tenant isolation:** each tenant has its own store. A test checks that one
@@ -30,21 +30,23 @@ searching, and they can act on outdated or conflicting information.
   answer is returned with the retrieved sources. If nothing passes the cutoff, the
   system returns "I don't know." without calling the model.
 - **Competing sources:** when retrieved chunks come from different files of the same
-  document type, the answer lists those files newest first, and the prompt tells the
-  model to prefer the newest and say that an older source differs. This uses
-  metadata only. It does not check whether the texts really disagree.
+  document type, the answer lists those files newest first, and the prompt marks the
+  newest source and tells the model to prefer it and say that an older source differs.
+  This uses metadata only. It does not check whether the texts really disagree.
+- **Command line:** `scripts/ask.py` loads any files you name for a tenant and
+  answers a question about them.
 - **Evaluation script:** compares similarity cutoffs on a small set of labelled
   questions.
 - **Configuration and logging:** validated settings; every log line includes a
   tenant ID.
-- **Quality checks:** 43 pytest tests, ruff linting, and pre-commit hooks that block
+- **Quality checks:** 49 pytest tests, ruff linting, and pre-commit hooks that block
   committed secrets and `.env` files.
 - **Docker:** a Dockerfile is included (not yet built and tested end to end).
 
-## Evaluation (small sample)
+## Evaluation (small samples)
 
-On 11 labelled questions over a six-sentence sample file (7 answerable, 4
-unrelated), with only the top chunk counted:
+**Similarity cutoff.** On 11 labelled questions over a six-sentence sample file (7
+answerable, 4 unrelated), with only the top chunk counted:
 
 | Cutoff | Answerable found | Unrelated refused |
 |---|---|---|
@@ -57,14 +59,18 @@ This sample is far too small to prove a good cutoff for real documents. 0.15 is 
 starting value to re-test on real files. Run it with
 `python -m scripts.eval_cutoffs`.
 
-## Competing documents (small demo)
+**Competing documents.** Two one-sentence return policies, a 2025 version (30 days)
+and a 2026 version (15 days), and the question "How many days do I have to return an
+item?", asked five times with `llama3.2:3b` through `scripts/ask.py`:
 
-`python -m scripts.conflict_demo` loads two return policies, a 2025 version (30
-days) and a 2026 version (15 days), and asks how many days a customer has to
-return an item. In four runs with `llama3.2:3b`, the model refused or hedged once
-and answered with the newest source (15 days) three times, mentioning that an older
-source differs in two of those. Results vary from run to run, so this is a demo, not
-a measured result.
+| Prompt | Correct (15 days) | Wrong (30 days) | Refused |
+|---|---|---|---|
+| Version and date shown, no label | 2 | 2 | 1 |
+| Newest source labelled | 5 | 0 | 0 |
+
+With the label, four of the five answers also said that an older source differs.
+This is one question on two tiny files, and a small local model varies from run to
+run, so it shows an improvement, not a guarantee.
 
 ## Planned
 
@@ -80,7 +86,7 @@ a measured result.
 flowchart LR
     A["Files<br/>TXT, DOCX, PDF"] --> B["Loaders<br/>src/loaders.py"]
     B --> C["Chunking<br/>src/chunking.py"]
-    C --> D["Chunks with metadata<br/>src/ingestion.py"]
+    C --> D["Chunks with metadata<br/>src/ingestion.py, src/pipeline.py"]
     D --> E["Embeddings<br/>src/sbert_embedder.py"]
     E --> F["Per-tenant FAISS stores<br/>src/faiss_store.py, src/tenants.py"]
     F --> G["Prompt + local model<br/>src/prompts.py, src/ollama_llm.py"]
@@ -95,7 +101,7 @@ Solid boxes are built; dashed boxes are planned.
 
 ## Getting started
 
-Requires Python 3.11, Git, and [Ollama](https://ollama.com) for the answering demos.
+Requires Python 3.11, Git, and [Ollama](https://ollama.com) for answering.
 
 ```powershell
 git clone https://github.com/Laiba-Qayyum/policylens.git
@@ -106,13 +112,16 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-To try the answering demos (the first run downloads the embedding model):
+To ask a question about your own files (the first run downloads the embedding
+model):
 
 ```powershell
 ollama pull llama3.2:3b
-python -m scripts.ask_demo
-python -m scripts.conflict_demo
+python -m scripts.ask --tenant acme --file samples/hr_policy.txt --question "How many days of annual leave do I get?"
 ```
+
+Repeat `--file` to load several files. If they look like competing versions of the
+same document, the output ends with a note listing them, newest first.
 
 ## Project structure
 
@@ -123,6 +132,7 @@ python -m scripts.conflict_demo
 | `src/loaders.py` | TXT, DOCX and PDF loading |
 | `src/chunking.py` | Overlapping text chunks |
 | `src/ingestion.py` | Chunks with metadata |
+| `src/pipeline.py` | Loads files into a tenant's store |
 | `src/embeddings.py`, `src/sbert_embedder.py` | Embedder interface and MiniLM implementation |
 | `src/vector_store.py`, `src/faiss_store.py` | Store interface and FAISS implementation |
 | `src/tenants.py` | One store per tenant |
@@ -130,8 +140,10 @@ python -m scripts.conflict_demo
 | `src/prompts.py` | Builds the numbered prompt |
 | `src/llm.py`, `src/ollama_llm.py` | Model interface and Ollama client |
 | `src/answering.py` | Question to answer with sources |
+| `src/cli.py` | Command-line options |
 | `src/evaluation.py` | Scores retrieval on labelled questions |
-| `scripts/` | Demos and the cutoff evaluation |
+| `scripts/ask.py` | Ask a question about your files |
+| `scripts/` (other) | Demos and the cutoff evaluation |
 | `tests/` | pytest tests |
 | `docs/decisions/` | Decision records |
 | `PROBLEMS.md` | Problems encountered and how they were fixed |
@@ -151,9 +163,10 @@ against real test and script output. The problems I hit and how I fixed them are
 - The cutoff of 0.15 comes from a very small sample and may not suit real documents.
 - The competing-source check uses metadata only, so two unrelated files of the same
   type are also flagged.
-- Preferring the newest source depends on the model. In four runs on one example it
-  answered with the newest source three times, and mentioned the older one in two of
-  them.
+- Preferring the newest source depends on the model. The label made it reliable in
+  five runs on one tiny example, but a small local model can still get it wrong.
+- Files loaded from the command line get the default type "policy", version "1.0" and
+  the file's modified date. A missing file is not handled gracefully yet.
 - Needs a local Ollama server and model to answer.
 - No real contradiction detection, API or web interface yet.
 - The design stores search indexes in memory on one machine, so it suits a single
