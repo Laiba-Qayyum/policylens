@@ -52,3 +52,33 @@ def test_ask_requires_a_question() -> None:
     response = make_client().post("/tenants/acme/ask", json={})
 
     assert response.status_code == 422
+
+
+def make_empty_client() -> tuple[TestClient, TenantStores]:
+    stores = TenantStores(FakeStore)
+    return TestClient(create_app(stores, FakeLLM())), stores
+
+
+def test_upload_adds_the_file_to_the_tenant() -> None:
+    client, stores = make_empty_client()
+
+    response = client.post(
+        "/tenants/acme/documents",
+        files=[("files", ("policy.txt", b"annual leave is 20 days", "text/plain"))],
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"files": ["policy.txt"], "chunks": 1}
+    assert [c.source for c in stores.search("acme", "leave")] == ["policy.txt"]
+    assert stores.search("globex", "leave") == []
+
+
+def test_upload_keeps_only_the_file_name_not_the_folders() -> None:
+    client, _ = make_empty_client()
+
+    response = client.post(
+        "/tenants/acme/documents",
+        files=[("files", ("../../evil.txt", b"annual leave is 20 days", "text/plain"))],
+    )
+
+    assert response.json()["files"] == ["evil.txt"]
