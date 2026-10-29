@@ -86,3 +86,22 @@ def test_low_similarity_means_i_dont_know_and_no_llm_call() -> None:
     assert answer.text == "I don't know."
     assert answer.sources == []
     assert llm.prompts == []
+
+
+def test_answer_lists_competing_sources_newest_first() -> None:
+    stores = TenantStores(FakeStore)
+    stores.add(
+        "acme",
+        [
+            Chunk(
+                "returns within 30 days", "returns_2025.txt", 1, "policy", "1.0", date(2025, 1, 1)
+            ),
+            Chunk(
+                "returns within 15 days", "returns_2026.txt", 1, "policy", "2.0", date(2026, 1, 1)
+            ),
+        ],
+    )
+
+    answer = answer_question("acme", "returns", stores, FakeLLM("see sources"))
+
+    assert answer.competing == ["returns_2026.txt", "returns_2025.txt"]

@@ -1,5 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from src.conflicts import find_competing_sources
 from src.ingestion import Chunk
 from src.llm import LLM
 from src.prompts import build_prompt
@@ -12,6 +13,7 @@ REFUSAL = "I don't know."
 class Answer:
     text: str
     sources: list[Chunk]
+    competing: list[str] = field(default_factory=list)
 
 
 def answer_question(
@@ -28,4 +30,4 @@ def answer_question(
     reply = llm.complete(build_prompt(question, chunks))
     if reply.strip().lower().startswith("i don't know"):
         return Answer(REFUSAL, [])
-    return Answer(reply, chunks)
+    return Answer(reply, chunks, find_competing_sources(chunks))
