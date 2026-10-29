@@ -8,8 +8,9 @@ date) and prefers the newest. Detecting real contradictions is planned.
 
 > **Status:** in development. Loading, chunking, per-tenant search, answering through
 > a local model, citation checking, a first check for competing documents, a
-> command-line tool and a small HTTP API work and are tested. Contradiction
-> detection, testing on real documents and a web interface are planned.
+> command-line tool and a small HTTP API work and are tested. A first test on three
+> real documents is described below, including the failures that remain.
+> Contradiction detection and a web interface are planned.
 
 ## Problem
 
@@ -47,7 +48,7 @@ searching, and they can act on outdated or conflicting information.
   questions.
 - **Configuration and logging:** validated settings; every log line includes a
   tenant ID.
-- **Quality checks:** 67 pytest tests, ruff linting, and pre-commit hooks that block
+- **Quality checks:** 70 pytest tests, ruff linting, and pre-commit hooks that block
   committed secrets and `.env` files.
 - **Docker:** a Dockerfile is included (not yet built and tested end to end).
 
@@ -201,6 +202,27 @@ Built with AI assistance (Claude) as a guide and reviewer, following a 10-day pl
 I write and run the code step by step, writing the test first, and I check results
 against real test and script output. The problems I hit and how I fixed them are in
 `PROBLEMS.md`.
+
+## Testing on real documents
+
+I tested on three public university policies (Greenwich staff expenses, Surrey flexible working, Nottingham travel expenses), each loaded into its own tenant. The PDFs are not in this repository. Before running anything I wrote ten questions with expected answers and pages, including two the documents do not answer.
+
+A question counts as correct when the reply states the expected fact and the first source is the expected file. The page is tracked separately.
+
+| Run | Correct |
+|---|---|
+| First run, before any change | 6 of 10 |
+| After the Yes/No instruction, run 1 | 9 of 10 |
+| After the Yes/No instruction, run 2 | 8 of 10 |
+
+What I found: the answers to "Can I..." questions were being refused although retrieval had found the right text, and a code-level Yes/No instruction fixed that. The two questions the documents do not answer were refused correctly every time.
+
+Still wrong or unverified:
+- The appeal deadline question (Q6) fails: the right passage ranks too low and the model answers with a different rule.
+- The page printed for one answer (Q4) is off by one. The verified flag only checks that a cited source number exists, not that the source supports the answer.
+- I designed the Yes/No fix after seeing two of these ten questions fail, so these ten questions do not prove it works in general.
+- Three documents, ten questions and two runs on a small local model (llama3.2:3b). Results may differ for other models and documents.
+- A question counts as yes/no only if its first word is Can, Is, Do and similar. "Can you tell me how long...?" would be misclassified.
 
 ## Limitations
 
