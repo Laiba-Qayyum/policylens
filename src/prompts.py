@@ -3,12 +3,15 @@ from src.ingestion import Chunk
 
 
 def build_prompt(question: str, chunks: list[Chunk]) -> str:
+    competing = find_competing_sources(chunks)
+    newest = competing[0] if competing else None
     sources = "\n".join(
-        f"[{n}] {c.source}, page {c.page}: {c.text} (version {c.version}, dated {c.doc_date})"
+        f"[{n}] {c.source}, page {c.page}: {c.text} "
+        f"(version {c.version}, dated {c.doc_date}{', newest' if c.source == newest else ''})"
         for n, c in enumerate(chunks, start=1)
     )
     rules = "Answer the question using only the sources below. Cite the sources you use like [1]. "
-    if find_competing_sources(chunks):
+    if competing:
         rules += (
             "If sources disagree, do not refuse: answer with the newest one and say that "
             "an older source differs. "
