@@ -60,3 +60,12 @@ def test_ingest_files_adds_nothing_if_any_file_is_unsupported(tmp_path: Path) ->
         ingest_files(stores, "acme", [good, bad])
 
     assert stores.search("acme", "leave") == []
+
+
+def test_ingest_files_uses_the_explicit_date_when_given(tmp_path: Path) -> None:
+    a = write(tmp_path, "a.txt", "annual leave is 20 days")
+    stores = TenantStores(FakeStore)
+
+    ingest_files(stores, "acme", [a], doc_dates={a: date(2025, 1, 1)})
+
+    assert stores.search("acme", "leave")[0].doc_date == date(2025, 1, 1)
