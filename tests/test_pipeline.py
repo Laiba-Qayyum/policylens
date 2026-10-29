@@ -1,6 +1,8 @@
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from src.ingestion import Chunk
 from src.pipeline import ingest_files
 from src.tenants import TenantStores
@@ -47,3 +49,14 @@ def test_ingest_files_uses_the_file_date_and_default_metadata(tmp_path: Path) ->
     assert chunk.doc_type == "policy"
     assert chunk.version == "1.0"
     assert chunk.doc_date == date.today()
+
+
+def test_ingest_files_adds_nothing_if_any_file_is_unsupported(tmp_path: Path) -> None:
+    good = write(tmp_path, "a.txt", "annual leave is 20 days")
+    bad = write(tmp_path, "b.exe", "not a document")
+    stores = TenantStores(FakeStore)
+
+    with pytest.raises(ValueError):
+        ingest_files(stores, "acme", [good, bad])
+
+    assert stores.search("acme", "leave") == []
