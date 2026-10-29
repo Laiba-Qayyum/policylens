@@ -1,7 +1,7 @@
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, UploadFile
+from fastapi import FastAPI, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from src.answering import answer_question
@@ -26,7 +26,10 @@ def create_app(stores: TenantStores, llm: LLM, min_score: float = DEFAULT_MIN_SC
                 path = Path(folder) / Path(upload_file.filename or "upload").name
                 path.write_bytes(upload_file.file.read())
                 paths.append(path)
-            chunks = ingest_files(stores, tenant_id, paths)
+            try:
+                chunks = ingest_files(stores, tenant_id, paths)
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail=str(error)) from error
         return {"files": [path.name for path in paths], "chunks": chunks}
 
     @app.post("/tenants/{tenant_id}/ask")

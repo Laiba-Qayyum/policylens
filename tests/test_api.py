@@ -82,3 +82,19 @@ def test_upload_keeps_only_the_file_name_not_the_folders() -> None:
     )
 
     assert response.json()["files"] == ["evil.txt"]
+
+
+def test_upload_of_an_unsupported_file_is_rejected_and_adds_nothing() -> None:
+    client, stores = make_empty_client()
+
+    response = client.post(
+        "/tenants/acme/documents",
+        files=[
+            ("files", ("a.txt", b"annual leave is 20 days", "text/plain")),
+            ("files", ("b.exe", b"not a document", "application/octet-stream")),
+        ],
+    )
+
+    assert response.status_code == 400
+    assert "Unsupported file type" in response.json()["detail"]
+    assert stores.search("acme", "leave") == []
