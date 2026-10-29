@@ -22,3 +22,17 @@ def test_prompt_contains_question_and_refusal_rule() -> None:
 
     assert "Question: How many leave days?" in prompt
     assert "I don't know" in prompt
+
+
+def test_prompt_shows_version_and_date() -> None:
+    prompt = build_prompt("How many leave days?", [make_chunk("20 days of leave")])
+
+    assert "(version 1.0, dated 2026-01-01)" in prompt
+
+
+def test_prompt_mentions_newest_only_when_sources_compete() -> None:
+    one_file = build_prompt("q", [make_chunk("a"), make_chunk("b")])
+    two_files = build_prompt("q", [make_chunk("a", "old.txt"), make_chunk("b", "new.txt")])
+
+    assert "newest" not in one_file
+    assert "newest" in two_files
