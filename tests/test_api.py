@@ -20,15 +20,18 @@ class FakeStore:
 
 
 class FakeLLM:
+    def __init__(self, reply: str = "20 days [1]") -> None:
+        self.reply = reply
+
     def complete(self, prompt: str) -> str:
-        return "20 days [1]"
+        return self.reply
 
 
-def make_client() -> TestClient:
+def make_client(reply: str = "20 days [1]") -> TestClient:
     stores = TenantStores(FakeStore)
     chunk = Chunk("annual leave is 20 days", "hr.txt", 1, "policy", "1.0", date(2026, 1, 1))
     stores.add("acme", [chunk])
-    return TestClient(create_app(stores, FakeLLM()))
+    return TestClient(create_app(stores, FakeLLM(reply)))
 
 
 def test_ask_returns_answer_sources_and_competing() -> None:
@@ -39,19 +42,32 @@ def test_ask_returns_answer_sources_and_competing() -> None:
         "answer": "20 days [1]",
         "sources": [{"source": "hr.txt", "page": 1}],
         "competing": [],
+        "verified": True,
     }
 
 
 def test_ask_for_another_tenant_gets_a_refusal_and_no_sources() -> None:
     response = make_client().post("/tenants/globex/ask", json={"question": "annual leave"})
 
-    assert response.json() == {"answer": "I don't know.", "sources": [], "competing": []}
+    assert response.json() == {
+        "answer": "I don't know.",
+        "sources": [],
+        "competing": [],
+        "verified": True,
+    }
 
 
 def test_ask_requires_a_question() -> None:
     response = make_client().post("/tenants/acme/ask", json={})
 
     assert response.status_code == 422
+
+
+def test_ask_flags_an_answer_that_cites_no_source() -> None:
+    response = make_client("20 days").post("/tenants/acme/ask", json={"question": "annual leave"})
+
+    assert response.json()["verified"] is False
+    assert response.json()["sources"] == [{"source": "hr.txt", "page": 1}]
 
 
 def make_empty_client() -> tuple[TestClient, TenantStores]:

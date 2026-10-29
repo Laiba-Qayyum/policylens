@@ -39,6 +39,7 @@ def create_app(stores: TenantStores, llm: LLM, min_score: float = DEFAULT_MIN_SC
             "answer": answer.text,
             "sources": [{"source": c.source, "page": c.page} for c in answer.sources],
             "competing": answer.competing,
+            "verified": answer.verified,
         }
 
     return app
