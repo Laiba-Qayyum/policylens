@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from src.citations import cited_sources
+from src.citations import best_support, cited_sources
 from src.conflicts import find_competing_sources
 from src.ingestion import Chunk
 from src.llm import LLM
@@ -34,4 +34,6 @@ def answer_question(
         return Answer(REFUSAL, [])
     cited, invalid = cited_sources(reply, chunks)
     verified = bool(cited) and not invalid
-    return Answer(reply, cited or chunks, find_competing_sources(chunks), verified)
+    best = best_support(reply, chunks) if verified else None
+    sources = [best] if best else (cited or chunks)
+    return Answer(reply, sources, find_competing_sources(chunks), verified)
