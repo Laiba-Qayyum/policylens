@@ -49,6 +49,14 @@ def create_app(
                 raise HTTPException(status_code=400, detail=str(error)) from error
         return {"files": [path.name for path in paths], "chunks": chunks}
 
+    @app.get("/tenants/{tenant_id}/documents", dependencies=[Depends(require_key)])
+    def list_documents(tenant_id: str) -> dict[str, object]:
+        documents = stores.documents(tenant_id)
+        return {
+            "documents": documents,
+            "total_chunks": sum(d["chunks"] for d in documents),
+        }
+
     @app.post("/tenants/{tenant_id}/ask", dependencies=[Depends(require_key)])
     def ask(tenant_id: str, request: AskRequest) -> dict[str, object]:
         answer = answer_question(tenant_id, request.question, stores, llm, min_score=min_score)
