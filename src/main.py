@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from src.activity import ActivityLog
 from src.api import create_app
 from src.faiss_store import FaissStore
 from src.keys import parse_api_keys
@@ -19,6 +20,7 @@ except ValueError as error:
 embedder = MiniLMEmbedder()
 data_dir = Path(os.environ.get("POLICYLENS_DATA", "data/tenants"))
 stores = TenantStores(lambda: FaissStore(embedder, MiniLMEmbedder.dim), directory=data_dir)
+activity = ActivityLog(data_dir / "activity")
 ollama_url = os.environ.get("OLLAMA_URL")
 llm = OllamaLLM(url=ollama_url) if ollama_url else OllamaLLM()
-app = create_app(stores, llm, api_keys=api_keys)
+app = create_app(stores, llm, api_keys=api_keys, activity=activity)
