@@ -23,15 +23,21 @@ class PolicyLensClient:
         self._headers = {"X-API-Key": api_key.encode()} if api_key else {}
 
     def upload(self, tenant: str, files: list[tuple[str, bytes]]) -> dict:
-        return self._post(tenant, "documents", files=[("files", f) for f in files])
+        return self._request("POST", tenant, "documents", files=[("files", f) for f in files])
 
     def ask(self, tenant: str, question: str) -> dict:
-        return self._post(tenant, "ask", json={"question": question})
+        return self._request("POST", tenant, "ask", json={"question": question})
 
-    def _post(self, tenant: str, action: str, **kwargs) -> dict:
+    def documents(self, tenant: str) -> dict:
+        return self._request("GET", tenant, "documents")
+
+    def activity(self, tenant: str) -> dict:
+        return self._request("GET", tenant, "activity")
+
+    def _request(self, method: str, tenant: str, action: str, **kwargs) -> dict:
         url = f"{self._base_url}/tenants/{quote(tenant, safe='')}/{action}"
         try:
-            response = self._http.post(url, headers=self._headers, **kwargs)
+            response = self._http.request(method, url, headers=self._headers, **kwargs)
         except httpx.HTTPError as error:
             raise ApiError(f"Cannot reach the API at {self._base_url}") from error
         if response.status_code >= 400:
