@@ -28,7 +28,10 @@ def ask_through_the_page(monkeypatch: pytest.MonkeyPatch, result=None, error=Non
     monkeypatch.setattr(PolicyLensClient, "ask", fake_ask)
     monkeypatch.setattr(PolicyLensClient, "documents", lambda self, tenant: EMPTY_DOCS)
     monkeypatch.setattr(PolicyLensClient, "activity", lambda self, tenant: EMPTY_ACTIVITY)
-    page = AppTest.from_file(APP).run()
+    page = AppTest.from_file(APP)
+    page.session_state["workspace"] = "acme"
+    page.session_state["workspace_key"] = "test-key-1234567890"
+    page = page.run()
     page.text_input(key="question").set_value("How many days?")
     return page.button(key="ask").click().run()
 

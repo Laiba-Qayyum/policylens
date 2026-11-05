@@ -35,6 +35,13 @@ ANSWER = {
 }
 
 
+def signed_in() -> AppTest:
+    page = AppTest.from_file(APP)
+    page.session_state["workspace"] = "acme"
+    page.session_state["workspace_key"] = "test-key-1234567890"
+    return page
+
+
 def open_page(monkeypatch, docs=DOCS, activity=ACTIVITY, error=None) -> AppTest:
     def fake_documents(self, tenant):
         if error:
@@ -48,7 +55,7 @@ def open_page(monkeypatch, docs=DOCS, activity=ACTIVITY, error=None) -> AppTest:
 
     monkeypatch.setattr(PolicyLensClient, "documents", fake_documents)
     monkeypatch.setattr(PolicyLensClient, "activity", fake_activity)
-    return AppTest.from_file(APP).run()
+    return signed_in().run()
 
 
 def page_html(page: AppTest) -> str:
@@ -131,7 +138,7 @@ def test_the_cards_include_the_question_just_asked(monkeypatch):
             },
         },
     )
-    page = AppTest.from_file(APP).run()
+    page = signed_in().run()
     page.text_input(key="question").set_value("How many days?")
 
     page = page.button(key="ask").click().run()
