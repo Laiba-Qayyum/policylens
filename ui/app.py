@@ -5,6 +5,46 @@ import streamlit as st
 
 from src.client import ApiError, PolicyLensClient
 
+STYLE = """<style>
+@keyframes pl-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+[data-testid="stMetric"] {
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: rgba(128, 128, 128, 0.10);
+  border: 1px solid rgba(128, 128, 128, 0.18);
+  animation: pl-rise 0.5s ease both;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+[data-testid="stMetric"]:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+.pl-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  background: rgba(128, 128, 128, 0.08);
+  animation: pl-rise 0.4s ease both;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+.pl-row:hover { transform: translateX(4px); background: rgba(128, 128, 128, 0.16); }
+.pl-row span:last-child { opacity: 0.7; white-space: nowrap; }
+.pl-row:nth-child(2) { animation-delay: 0.05s; }
+.pl-row:nth-child(3) { animation-delay: 0.10s; }
+.pl-row:nth-child(4) { animation-delay: 0.15s; }
+.pl-row:nth-child(5) { animation-delay: 0.20s; }
+.pl-row:nth-child(n+6) { animation-delay: 0.25s; }
+@media (prefers-reduced-motion: reduce) {
+  [data-testid="stMetric"], .pl-row { animation: none; transition: none; }
+}
+</style>"""
+
 
 def plural(count: int, word: str) -> str:
     return f"{count} {word}" if count == 1 else f"{count} {word}s"
@@ -30,6 +70,7 @@ def rows(pairs: list[tuple[str, str]]) -> str:
 
 
 st.set_page_config(page_title="PolicyLens", layout="wide")
+st.markdown(STYLE, unsafe_allow_html=True)
 st.title("PolicyLens")
 
 with st.sidebar:
