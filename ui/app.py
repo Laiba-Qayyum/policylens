@@ -47,6 +47,7 @@ with documents_tab:
     uploads = st.file_uploader(
         "PDF, DOCX or TXT files", type=["pdf", "docx", "txt"], accept_multiple_files=True
     )
+    st.caption("Choose your files, then click Upload to add them.")
     if st.button("Upload", key="upload") and uploads:
         try:
             result = client.upload(tenant, [(f.name, f.getvalue()) for f in uploads])
@@ -56,6 +57,7 @@ with documents_tab:
 
 with ask_tab:
     st.subheader("Ask a question")
+    empty_hint = st.empty()
     question = st.text_input("Question", key="question")
     if st.button("Ask", key="ask") and question:
         try:
@@ -87,6 +89,11 @@ try:
 except ApiError as error:
     docs = activity = None
     load_error = str(error)
+
+if docs is not None and not docs["documents"]:
+    empty_hint.info(
+        "Upload a document first: open the Documents tab, choose a file, then click Upload."
+    )
 
 with header:
     status = "bad" if load_error else "ok"
