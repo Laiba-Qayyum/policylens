@@ -34,6 +34,13 @@ def company_error(company: str) -> str | None:
     return None
 
 
+def signin_credentials(name: str, key: str) -> tuple[str, str]:
+    cleaned = name.strip().lower()
+    if not re.fullmatch(r"[a-z0-9_-]+", cleaned):
+        cleaned = workspace_slug(name)
+    return cleaned, key.strip()
+
+
 def key_file(tenant: str, key: str) -> str:
     return (
         "PolicyLens workspace key\n"
@@ -94,10 +101,11 @@ def _create_form(api_url: str) -> None:
 
 
 def _signin_form(api_url: str) -> None:
-    name = st.text_input("Workspace name", key="signin_name").strip()
-    key = st.text_input("Workspace key", type="password", key="signin_key")
+    typed_name = st.text_input("Workspace name", key="signin_name")
+    typed_key = st.text_input("Workspace key", type="password", key="signin_key")
     if not st.button("Sign in", key="signin", type="primary"):
         return
+    name, key = signin_credentials(typed_name, typed_key)
     try:
         PolicyLensClient(api_url, api_key=key).documents(name)
     except ApiError as problem:
