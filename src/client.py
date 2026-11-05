@@ -22,6 +22,9 @@ class PolicyLensClient:
         self._http = http or httpx.Client(timeout=120)
         self._headers = {"X-API-Key": api_key.encode()} if api_key else {}
 
+    def create_workspace(self, name: str) -> dict:
+        return self._send("POST", f"{self._base_url}/tenants", {}, json={"name": name})
+
     def upload(self, tenant: str, files: list[tuple[str, bytes]]) -> dict:
         return self._request("POST", tenant, "documents", files=[("files", f) for f in files])
 
@@ -36,8 +39,11 @@ class PolicyLensClient:
 
     def _request(self, method: str, tenant: str, action: str, **kwargs) -> dict:
         url = f"{self._base_url}/tenants/{quote(tenant, safe='')}/{action}"
+        return self._send(method, url, self._headers, **kwargs)
+
+    def _send(self, method: str, url: str, headers: dict, **kwargs) -> dict:
         try:
-            response = self._http.request(method, url, headers=self._headers, **kwargs)
+            response = self._http.request(method, url, headers=headers, **kwargs)
         except httpx.HTTPError as error:
             raise ApiError(f"Cannot reach the API at {self._base_url}") from error
         if response.status_code >= 400:
