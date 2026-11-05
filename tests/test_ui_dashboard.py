@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
@@ -21,6 +22,10 @@ ACTIVITY = {
         },
     ],
     "summary": {"uploads": 1, "questions": 2, "verified_questions": 1},
+}
+NO_ACTIVITY = {
+    "events": [],
+    "summary": {"uploads": 0, "questions": 0, "verified_questions": 0},
 }
 ANSWER = {
     "answer": "15 days [1]",
@@ -50,13 +55,16 @@ def page_html(page: AppTest) -> str:
     return "\n".join(m.value for m in page.markdown)
 
 
-def test_the_overview_shows_the_real_counts(monkeypatch):
-    page = open_page(monkeypatch)
+def cards(page: AppTest) -> dict[str, str]:
+    pattern = r'<div class="pl-num">(.*?)</div><div class="pl-label">(.*?)</div>'
+    return {label: value for value, label in re.findall(pattern, page_html(page))}
 
-    assert {m.label: m.value for m in page.metric} == {
+
+def test_the_overview_cards_show_the_real_counts(monkeypatch):
+    assert cards(open_page(monkeypatch)) == {
         "Documents": "2",
-        "Chunks": "5",
-        "Questions": "2",
+        "Indexed chunks": "5",
+        "Questions asked": "2",
         "Answers with a valid citation": "1 of 2",
     }
 
@@ -80,21 +88,34 @@ def test_the_activity_tab_describes_each_event_in_plain_words(monkeypatch):
 
 def test_file_names_are_escaped_before_they_reach_the_html(monkeypatch):
     evil = {"documents": [{"source": "<script>x</script>.pdf", "chunks": 1}], "total_chunks": 1}
+    events = {
+        "events": [
+            {
+                "time": "2026-11-05T12:00:00+00:00",
+                "kind": "upload",
+                "detail": "<b>x</b>.pdf",
+                "verified": None,
+            }
+        ],
+        "summary": {"uploads": 1, "questions": 0, "verified_questions": 0},
+    }
 
-    html = page_html(open_page(monkeypatch, docs=evil))
+    html = page_html(open_page(monkeypatch, docs=evil, activity=events))
 
     assert "&lt;script&gt;" in html
+    assert "&lt;b&gt;" in html
     assert "<script>" not in html
+    assert "<b>x</b>" not in html
 
 
-def test_an_unreachable_api_shows_an_error_and_no_numbers(monkeypatch):
+def test_an_unreachable_api_shows_an_error_and_no_cards(monkeypatch):
     page = open_page(monkeypatch, error=ApiError("Cannot reach the API at http://x"))
 
     assert any("Cannot reach the API" in e.value for e in page.error)
-    assert not page.metric
+    assert cards(page) == {}
 
 
-def test_the_numbers_include_the_question_just_asked(monkeypatch):
+def test_the_cards_include_the_question_just_asked(monkeypatch):
     asked = []
     monkeypatch.setattr(PolicyLensClient, "ask", lambda self, tenant, q: asked.append(q) or ANSWER)
     monkeypatch.setattr(PolicyLensClient, "documents", lambda self, tenant: DOCS)
@@ -115,4 +136,38 @@ def test_the_numbers_include_the_question_just_asked(monkeypatch):
 
     page = page.button(key="ask").click().run()
 
-    assert {m.label: m.value for m in page.metric}["Questions"] == "1"
+    assert cards(page)["Questions asked"] == "1"
+
+
+def test_the_overview_shows_the_citation_rate_as_a_ring(monkeypatch):
+    html = page_html(open_page(monkeypatch))
+
+    assert '<div class="pl-ring-label">50%</div>' in html
+
+
+def test_the_citation_rate_with_no_questions_does_not_divide_by_zero(monkeypatch):
+    html = page_html(open_page(monkeypatch, activity=NO_ACTIVITY))
+
+    assert "No questions yet" in html
+
+
+def test_the_overview_lists_recent_activity_as_a_table(monkeypatch):
+    html = page_html(open_page(monkeypatch))
+
+    assert '<table class="pl-table">' in html
+    assert "Document uploaded" in html
+    assert "Question asked" in html
+    assert "Citation valid" in html
+    assert "No valid citation" in html
+
+
+def test_the_page_says_when_the_api_is_connected(monkeypatch):
+    connected = page_html(open_page(monkeypatch))
+    broken = page_html(open_page(monkeypatch, error=ApiError("Cannot reach the API")))
+
+    assert "API connected" in connected
+    assert "API connected" not in broken
+
+
+def test_the_page_has_a_welcome_header(monkeypatch):
+    assert "Welcome to PolicyLens" in page_html(open_page(monkeypatch))
