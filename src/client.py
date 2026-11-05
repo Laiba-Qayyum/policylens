@@ -15,9 +15,12 @@ def _detail(response: httpx.Response) -> str:
 
 
 class PolicyLensClient:
-    def __init__(self, base_url: str, http: httpx.Client | None = None) -> None:
+    def __init__(
+        self, base_url: str, http: httpx.Client | None = None, api_key: str | None = None
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._http = http or httpx.Client(timeout=120)
+        self._headers = {"X-API-Key": api_key.encode()} if api_key else {}
 
     def upload(self, tenant: str, files: list[tuple[str, bytes]]) -> dict:
         return self._post(tenant, "documents", files=[("files", f) for f in files])
@@ -28,7 +31,7 @@ class PolicyLensClient:
     def _post(self, tenant: str, action: str, **kwargs) -> dict:
         url = f"{self._base_url}/tenants/{quote(tenant, safe='')}/{action}"
         try:
-            response = self._http.post(url, **kwargs)
+            response = self._http.post(url, headers=self._headers, **kwargs)
         except httpx.HTTPError as error:
             raise ApiError(f"Cannot reach the API at {self._base_url}") from error
         if response.status_code >= 400:

@@ -8,7 +8,8 @@ st.title("PolicyLens")
 with st.sidebar:
     api_url = st.text_input("API address", "http://127.0.0.1:8000")
     tenant = st.text_input("Tenant", "acme")
-client = PolicyLensClient(api_url)
+    api_key = st.text_input("API key", type="password", key="api_key")
+client = PolicyLensClient(api_url, api_key=api_key)
 
 st.subheader("Add documents")
 uploads = st.file_uploader(
