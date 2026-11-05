@@ -12,6 +12,11 @@ ANSWER = {
     "competing": [],
     "verified": True,
 }
+EMPTY_DOCS = {"documents": [], "total_chunks": 0}
+EMPTY_ACTIVITY = {
+    "events": [],
+    "summary": {"uploads": 0, "questions": 0, "verified_questions": 0},
+}
 
 
 def ask_through_the_page(monkeypatch: pytest.MonkeyPatch, result=None, error=None) -> AppTest:
@@ -21,6 +26,8 @@ def ask_through_the_page(monkeypatch: pytest.MonkeyPatch, result=None, error=Non
         return result
 
     monkeypatch.setattr(PolicyLensClient, "ask", fake_ask)
+    monkeypatch.setattr(PolicyLensClient, "documents", lambda self, tenant: EMPTY_DOCS)
+    monkeypatch.setattr(PolicyLensClient, "activity", lambda self, tenant: EMPTY_ACTIVITY)
     page = AppTest.from_file(APP).run()
     page.text_input(key="question").set_value("How many days?")
     return page.button(key="ask").click().run()
