@@ -12,6 +12,7 @@ from ui.components import (
     rows,
     when,
 )
+from ui.signup import render_signup
 from ui.styles import STYLE
 
 st.set_page_config(page_title="PolicyLens", layout="wide")
@@ -19,10 +20,22 @@ st.markdown(STYLE, unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown('<div class="pl-brand">PolicyLens</div>', unsafe_allow_html=True)
-    api_url = st.text_input("API address", "http://127.0.0.1:8000")
-    tenant = st.text_input("Tenant", "acme")
-    api_key = st.text_input("API key", type="password", key="api_key")
-client = PolicyLensClient(api_url, api_key=api_key)
+    with st.expander("Advanced"):
+        api_url = st.text_input("API address", "http://127.0.0.1:8000", key="api_url")
+
+if "workspace" not in st.session_state:
+    render_signup(api_url)
+    st.stop()
+
+tenant = st.session_state["workspace"]
+client = PolicyLensClient(api_url, api_key=st.session_state["workspace_key"])
+
+with st.sidebar:
+    st.caption(f"Signed in as {tenant}")
+    if st.button("Sign out", key="signout"):
+        for name in ("workspace", "workspace_key", "new_workspace"):
+            st.session_state.pop(name, None)
+        st.rerun()
 
 header = st.container()
 overview_tab, ask_tab, documents_tab, activity_tab = st.tabs(
