@@ -6,11 +6,12 @@ model, cites the source file and page, and says "I don't know" when the document
 don't support an answer. It flags documents that may compete (same type, different
 date) and prefers the newest. Detecting real contradictions is planned.
 
-> **Status:** in development. Loading, chunking, per-tenant search, answering through
-> a local model, citation checking, a first check for competing documents, a
-> command-line tool and a small HTTP API work and are tested. A first test on three
-> real documents is described below, including the failures that remain.
-> Contradiction detection and a web interface are planned.
+> **Status:** in development, runs locally and in Docker. Loading, chunking, per-workspace
+> search, answering through a local model, citation checking, a first check for competing
+> documents, a command-line tool, an HTTP API with workspace keys, saved documents, an
+> activity log and a Streamlit page work and are tested. A first test on three real
+> documents is described below, including the failures that remain. Contradiction
+> detection is planned. It is not ready for the public internet (see Limitations).
 
 ## Problem
 
@@ -27,8 +28,8 @@ searching, and they can act on outdated or conflicting information.
   version "1.0". The date is the file's modified time unless you give one (see below).
 - **Semantic search:** chunks are embedded with a MiniLM model and searched with
   FAISS. A `min_score` cutoff drops chunks that are not similar enough.
-- **Tenant isolation:** each tenant has its own store. Tests check that one tenant
-  never retrieves another tenant's text, including through the API.
+- **Tenant isolation:** each tenant (workspace) has its own store. Tests check that one
+  tenant never retrieves another tenant's text, including through the API.
 - **Answering:** a numbered prompt is sent to a local model through Ollama. If nothing
   passes the cutoff, the system returns "I don't know." without calling the model.
 - **Citation check:** the sources returned are the ones the reply cites like `[1]`.
@@ -44,13 +45,31 @@ searching, and they can act on outdated or conflicting information.
   `POST /tenants/{tenant_id}/ask` answers a question, returning the answer, sources,
   competing files and the `verified` flag. An upload is all-or-nothing, and an
   unsupported file type returns a 400 error and adds nothing.
+- **Workspaces and keys:** `POST /tenants` creates a workspace and returns a key once.
+  Only a SHA-256 fingerprint of the key is stored (in `auth/registry.json` under the
+  data folder). Every other request needs the key in an `X-API-Key` header, and a key
+  opens only its own workspace. Keys set in `POLICYLENS_KEYS` are accepted too.
+  Sign-up is open to anyone who can reach the server.
+- **Saved documents:** each workspace's chunks are saved as JSON and reloaded after a
+  restart. Uploading a file with the same name replaces its earlier chunks.
+- **Document list and activity:** `GET /tenants/{id}/documents` lists files with chunk
+  counts, and `GET /tenants/{id}/activity` returns recent events and counts. The
+  activity log records uploads and questions but never the question text.
+- **Web page:** a Streamlit page (`ui/`) with sign-up and sign-in (the key is shown
+  once, with copy and download) and tabs for Overview, Ask, Documents and Activity.
+  Tested with Streamlit's `AppTest` and checked by hand in a browser.
 - **Evaluation script:** compares similarity cutoffs on a small set of labelled
   questions.
 - **Configuration and logging:** validated settings; every log line includes a
   tenant ID.
-- **Quality checks:** 70 pytest tests, ruff linting, and pre-commit hooks that block
-  committed secrets and `.env` files.
-- **Docker:** a Dockerfile is included (not yet built and tested end to end).
+- **Quality checks:** 216 pytest tests, ruff linting, pre-commit hooks that block
+  committed secrets and `.env` files, and a GitHub Actions workflow that runs ruff
+  and pytest.
+- **Docker:** the image builds and runs the API as a non-root user with data in `/data`.
+  Checked by hand with a volume: creating a workspace, signing in, restarting the
+  container and signing in again worked, and a duplicate name was rejected. Earlier
+  checks showed uploaded documents and the activity log surviving a restart. Answering
+  from inside the container (it needs Ollama to be reachable) has not been checked.
 
 ## Evaluation (small samples)
 
@@ -86,8 +105,8 @@ earlier comparison was withdrawn because both files had the same file-modified d
 **API check.** Against a real running server, uploading `samples/hr_policy.txt` for
 tenant `acme` and asking about annual leave gave a correct answer with its source.
 A parking question and the same leave question for a tenant with no documents both
-returned "I don't know." This was checked by hand, not by an automated test with the
-real model.
+returned "I don't know." This was checked by hand, before workspace keys were added,
+and not by an automated test with the real model.
 
 ## Planned
 
@@ -97,10 +116,12 @@ real model.
    is checked)
 3. Testing on real documents with a larger labelled set
 4. Date and version fields in the upload API
-5. A simple web interface
-6. Persistence, authentication, and a built and tested Docker image
+5. Document delete, key rotation, rate limiting on sign-up and HTTPS
+6. Checking answering from inside the Docker container
 
 ## Architecture
+
+### Question-answering pipeline
 
 ```mermaid
 flowchart LR
@@ -112,13 +133,86 @@ flowchart LR
     F --> G["Prompt + local model<br/>src/prompts.py, src/ollama_llm.py"]
     G --> H["Answer, cited sources,<br/>competing files, verified flag<br/>src/answering.py, src/citations.py, src/conflicts.py"]
     H -.->|planned| I["Contradiction detection"]
-    H -.->|planned| J["Web interface"]
     classDef planned stroke-dasharray: 5 5
-    class I,J planned
+    class I planned
 ```
 
-Solid boxes are built; dashed boxes are planned. The HTTP API (`src/api.py`) wraps
-the upload and answering steps, and `src/main.py` runs it with the real components.
+Solid boxes are built; the dashed box is planned. The HTTP API (`src/api.py`) wraps
+the upload and answering steps and checks workspace keys (`src/registry.py`), and
+`src/main.py` runs it with the real components. The Streamlit page in `ui/` talks to
+the API through `src/client.py`.
+
+### How the parts connect
+
+```mermaid
+flowchart LR
+    U["Browser"] --> P["Streamlit page<br/>ui/app.py, ui/signup.py"]
+    P --> C["Client<br/>src/client.py"]
+    C -->|"HTTP + X-API-Key"| API["FastAPI API<br/>src/api.py"]
+    API --> R["Workspace registry<br/>src/registry.py"]
+    API --> T["Per-workspace stores<br/>src/tenants.py + FAISS"]
+    API --> L["Activity log<br/>src/activity.py"]
+    API --> O["Ollama<br/>llama3.2:3b"]
+    subgraph D["Data folder (/data in Docker)"]
+        R --> RF["auth/registry.json<br/>key fingerprints only"]
+        T --> TF["one JSON file per workspace<br/>saved chunks"]
+        L --> LF["activity/*.jsonl<br/>no question text"]
+    end
+```
+
+### Sign-up and sign-in
+
+The server never stores a key. It stores only a SHA-256 fingerprint and compares
+fingerprints when someone signs in.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Page as Streamlit page
+    participant API as FastAPI API
+    participant Reg as Registry
+    User->>Page: Company name
+    Page->>API: POST /tenants with the workspace address
+    API->>Reg: Create workspace
+    Reg-->>API: New key, only its SHA-256 fingerprint is saved
+    API-->>Page: Workspace and key, shown once
+    Page-->>User: Key screen with copy and download
+    Note over User,Page: Later, to sign in
+    User->>Page: Workspace name and key
+    Page->>API: GET documents with X-API-Key
+    API->>Reg: Compare fingerprint of the key
+    alt key matches the workspace
+        API-->>Page: 200, signed in
+    else wrong or missing key
+        API-->>Page: 401 Invalid or missing API key
+    end
+```
+
+### What happens when you ask a question
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant API as FastAPI API
+    participant Store as Workspace store
+    participant LLM as Ollama model
+    participant Log as Activity log
+    User->>API: POST /tenants/acme/ask with X-API-Key
+    API->>API: Check the key belongs to acme
+    API->>Store: Search with the min_score cutoff
+    alt nothing passes the cutoff
+        API-->>User: I don't know, the model is not called
+    else chunks found
+        API->>LLM: Numbered prompt with the sources
+        LLM-->>API: Reply citing sources like [1]
+        API->>API: Check the cited numbers exist
+        API-->>User: Answer, sources, competing files, verified flag
+    end
+    API->>Log: Record the event, never the question text
+```
+
+The citation check only confirms that a cited number exists. It does not confirm that
+the source supports the answer (see Limitations).
 
 ## Getting started
 
@@ -157,16 +251,48 @@ warning.
 uvicorn src.main:app
 ```
 
-In a second terminal, upload a file and ask a question:
+In a second terminal, create a workspace. The key is returned once and the server keeps
+only a fingerprint of it, so save it:
 
 ```powershell
-curl.exe -F "files=@samples/hr_policy.txt" http://127.0.0.1:8000/tenants/acme/documents
-$body = '{"question": "How many days of annual leave do I get?"}'
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/tenants/acme/ask -ContentType "application/json" -Body $body
+$workspace = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/tenants -ContentType "application/json" -Body '{"name": "acme"}'
+$key = $workspace.api_key
 ```
+
+Then upload a file and ask a question with that key:
+
+```powershell
+curl.exe -H "X-API-Key: $key" -F "files=@samples/hr_policy.txt" http://127.0.0.1:8000/tenants/acme/documents
+$body = '{"question": "How many days of annual leave do I get?"}'
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/tenants/acme/ask -Headers @{ "X-API-Key" = $key } -ContentType "application/json" -Body $body
+```
+
+Workspace names use lowercase letters, numbers, hyphens and underscores. A request
+with a missing or wrong key gets a 401 error.
 
 The interactive page at `http://127.0.0.1:8000/docs` works for asking questions, but
 its file picker did not send files correctly in testing, so use `curl.exe` to upload.
+
+**Run the web page.** With the API running, start the page from the project folder:
+
+```powershell
+python -m streamlit run ui\app.py
+```
+
+Create a workspace, save the key it shows (it appears once), then upload documents in
+the Documents tab and ask in the Ask tab. Restart the page after changing code in
+`src/` or `ui/`.
+
+**Run with Docker.** Build the image and run it with a volume so workspaces and
+documents survive restarts:
+
+```powershell
+docker build -t policylens:latest .
+docker run --rm -p 8000:8000 -v policylens-data:/data policylens:latest
+```
+
+Answering from inside the container has not been checked, because it needs the
+container to reach an Ollama server.
 
 ## Project structure
 
@@ -180,19 +306,26 @@ its file picker did not send files correctly in testing, so use `curl.exe` to up
 | `src/pipeline.py` | Loads files into a tenant's store, all-or-nothing, with optional dates |
 | `src/embeddings.py`, `src/sbert_embedder.py` | Embedder interface and MiniLM implementation |
 | `src/vector_store.py`, `src/faiss_store.py` | Store interface and FAISS implementation |
-| `src/tenants.py` | One store per tenant |
+| `src/tenants.py` | One store per tenant, saved to disk, replaces a file's chunks on re-upload |
+| `src/registry.py` | Workspace names and key fingerprints (keys are never stored) |
+| `src/activity.py` | Per-workspace activity log (no question text) |
 | `src/conflicts.py` | Finds files that may compete (same type, different date) |
 | `src/citations.py` | Finds which sources a reply cites and which citations are invalid |
 | `src/prompts.py` | Builds the numbered prompt |
 | `src/llm.py`, `src/ollama_llm.py` | Model interface and Ollama client |
 | `src/answering.py` | Question to answer with sources |
 | `src/cli.py` | Command-line options |
-| `src/api.py` | HTTP endpoints for upload and ask |
+| `src/api.py` | HTTP endpoints: sign-up, upload, document list, activity, ask |
+| `src/client.py` | Python client the web page uses to call the API |
 | `src/main.py` | Runs the API with the real components |
 | `src/evaluation.py` | Scores retrieval on labelled questions |
+| `ui/app.py` | The dashboard page (Overview, Ask, Documents, Activity) |
+| `ui/signup.py` | Sign-up and sign-in page, one-time key screen |
+| `ui/components.py`, `ui/styles.py` | HTML cards and panels, and the page's CSS |
 | `scripts/ask.py` | Ask a question about your files |
 | `scripts/` (other) | Demos and the cutoff evaluation |
 | `tests/` | pytest tests |
+| `Dockerfile` | Builds the API image |
 | `docs/decisions/` | Decision records |
 | `PROBLEMS.md` | Problems encountered and how they were fixed |
 
@@ -238,12 +371,17 @@ Still wrong or unverified:
 - Document dates come from the file's modified time unless you pass `--file path@date`.
   The API has no date field yet, so uploaded files get their upload time. The type and
   version are fixed defaults.
-- The API has no authentication: any caller who can reach it can name any tenant.
-- Documents are stored in memory, so restarting the server loses everything that
-  was uploaded.
+- Sign-up is open and has no rate limiting: anyone who can reach the server can create
+  workspaces. There is no HTTPS, and keys cannot be recovered or rotated. Anyone
+  holding a key has full access to that workspace. Do not expose this to the public
+  internet as it is.
+- Documents are saved as files on one machine. There is no database or backup, and
+  documents cannot be deleted (uploading a file with the same name replaces it).
+- Scanned PDFs (images of text) are not read, because there is no OCR.
 - Only the happy path and unsupported file types are handled. A corrupt PDF or DOCX
   is not handled gracefully yet.
-- Everything was tested on tiny sample files, not on real documents yet.
+- Everything was tested on tiny sample files and three public PDFs, not on a large
+  real document set.
 - Needs a local Ollama server and model to answer.
 - The design stores search indexes in memory on one machine, so it suits a single
   server, not thousands of customers. A larger deployment would need a
