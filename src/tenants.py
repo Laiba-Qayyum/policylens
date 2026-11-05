@@ -35,21 +35,28 @@ class TenantStores:
             directory.mkdir(parents=True, exist_ok=True)
             for file in sorted(directory.glob("*.json")):
                 if SAFE_ID.fullmatch(file.stem):
-                    self._add(file.stem, _read(file))
+                    self._set(file.stem, _read(file))
 
-    def _add(self, tenant_id: str, chunks: list[Chunk]) -> None:
-        if tenant_id not in self._stores:
-            self._stores[tenant_id] = self._factory()
-            self._chunks[tenant_id] = []
-        self._stores[tenant_id].add(chunks)
-        self._chunks[tenant_id].extend(chunks)
+    def _set(self, tenant_id: str, chunks: list[Chunk]) -> None:
+        store = self._factory()
+        store.add(chunks)
+        self._stores[tenant_id] = store
+        self._chunks[tenant_id] = list(chunks)
 
     def add(self, tenant_id: str, chunks: list[Chunk]) -> None:
         if self._directory is not None and not SAFE_ID.fullmatch(tenant_id):
             raise ValueError(f"invalid tenant id: {tenant_id!r}")
-        self._add(tenant_id, chunks)
+        replaced = {c.source for c in chunks}
+        kept = [c for c in self._chunks.get(tenant_id, []) if c.source not in replaced]
+        self._set(tenant_id, kept + list(chunks))
         if self._directory is not None:
             _write(self._directory / f"{tenant_id}.json", self._chunks[tenant_id])
+
+    def documents(self, tenant_id: str) -> list[dict]:
+        counts: dict[str, int] = {}
+        for chunk in self._chunks.get(tenant_id, []):
+            counts[chunk.source] = counts.get(chunk.source, 0) + 1
+        return [{"source": s, "chunks": n} for s, n in counts.items()]
 
     def search(
         self, tenant_id: str, query: str, k: int = 3, min_score: float = -1.0

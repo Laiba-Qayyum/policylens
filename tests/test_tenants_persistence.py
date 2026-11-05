@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -30,14 +31,17 @@ def test_chunks_survive_a_restart(tmp_path):
     assert second.search("acme", "returns") == [make("returns within 15 days")]
 
 
-def test_adding_twice_keeps_both_after_a_restart(tmp_path):
+def test_adding_two_files_keeps_both_after_a_restart(tmp_path):
     first = TenantStores(FakeStore, directory=tmp_path)
     first.add("acme", [make("one")])
-    first.add("acme", [make("two")])
+    first.add("acme", [replace(make("two"), source="other.pdf")])
 
     second = TenantStores(FakeStore, directory=tmp_path)
 
-    assert second.search("acme", "x") == [make("one"), make("two")]
+    assert second.search("acme", "x") == [
+        make("one"),
+        replace(make("two"), source="other.pdf"),
+    ]
 
 
 def test_tenants_stay_separate_after_a_restart(tmp_path):
