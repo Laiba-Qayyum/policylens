@@ -10,4 +10,6 @@ from src.tenants import TenantStores
 embedder = MiniLMEmbedder()
 data_dir = Path(os.environ.get("POLICYLENS_DATA", "data/tenants"))
 stores = TenantStores(lambda: FaissStore(embedder, MiniLMEmbedder.dim), directory=data_dir)
-app = create_app(stores, OllamaLLM())
+ollama_url = os.environ.get("OLLAMA_URL")
+llm = OllamaLLM(url=ollama_url) if ollama_url else OllamaLLM()
+app = create_app(stores, llm)
